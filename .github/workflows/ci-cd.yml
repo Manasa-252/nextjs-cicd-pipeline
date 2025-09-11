@@ -56,11 +56,16 @@ jobs:
     - name: Build application
       run: npm run build
 
+    # Only upload the build folder if it exists
     - name: Upload production-ready build
       uses: actions/upload-artifact@v4
       with:
         name: nextjs-build
-        path: .next/
+        path: |
+          .next/
+          public/
+          package.json
+        if-no-files-found: warn
 
   deploy:
     runs-on: ubuntu-latest
@@ -84,9 +89,9 @@ jobs:
     - name: Build application
       run: npm run build
 
+    # Use the official Vercel deployment action
     - name: Deploy to Vercel
-      # Fixed: Changed from vercel/action to vercel/actions
-      uses: vercel/actions@v28
+      uses: vercel/action@v28
       with:
         vercel-token: AceSPbB10fedvyWABATKH6GS
         vercel-org-id: manasa-252
