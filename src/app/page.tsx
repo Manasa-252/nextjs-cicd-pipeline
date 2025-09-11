@@ -20,6 +20,7 @@ export default function Home() {
             </code>
             .
           </li>
+          <h1>Welcome to Next.js!</h1>
           <li className="tracking-[-.01em]">
             Save and see changes.
           </li>
