@@ -85,7 +85,7 @@ jobs:
     # Deploy to Vercel using CLI
     - name: Deploy to Vercel
       run: |
-        vercel --prod --token AceSPbB10fedvyWABATKH6GS --confirm
+        vercel --prod --token Ne7k4LyRfuWQWUMugq79H9vc --confirm
       env:
-        VERCEL_ORG_ID: manasa-252
+        VERCEL_ORG_ID: sT0ThO7ku3gNQM3AZ0oy2nw3
         VERCEL_PROJECT_ID: prj_NUeINMWNYsu3tFcNYdzrpDmssXDx
