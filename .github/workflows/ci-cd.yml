@@ -57,7 +57,6 @@ jobs:
       run: npm run build
 
     - name: Upload production-ready build
-      # Updated from v3 to v4
       uses: actions/upload-artifact@v4
       with:
         name: nextjs-build
@@ -86,7 +85,8 @@ jobs:
       run: npm run build
 
     - name: Deploy to Vercel
-      uses: vercel/action@v28
+      # Fixed: Changed from vercel/action to vercel/actions
+      uses: vercel/actions@v28
       with:
         vercel-token: AceSPbB10fedvyWABATKH6GS
         vercel-org-id: manasa-252
