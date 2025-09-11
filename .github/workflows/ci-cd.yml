@@ -56,17 +56,6 @@ jobs:
     - name: Build application
       run: npm run build
 
-    # Only upload the build folder if it exists
-    - name: Upload production-ready build
-      uses: actions/upload-artifact@v4
-      with:
-        name: nextjs-build
-        path: |
-          .next/
-          public/
-          package.json
-        if-no-files-found: warn
-
   deploy:
     runs-on: ubuntu-latest
     needs: build
@@ -89,11 +78,14 @@ jobs:
     - name: Build application
       run: npm run build
 
-    # Use the official Vercel deployment action
+    # Install Vercel CLI
+    - name: Install Vercel CLI
+      run: npm install --global vercel@latest
+
+    # Deploy to Vercel using CLI
     - name: Deploy to Vercel
-      uses: vercel/action@v28
-      with:
-        vercel-token: AceSPbB10fedvyWABATKH6GS
-        vercel-org-id: manasa-252
-        vercel-project-id: prj_NUeINMWNYsu3tFcNYdzrpDmssXDx
-        working-directory: ./
+      run: |
+        vercel --prod --token AceSPbB10fedvyWABATKH6GS --confirm
+      env:
+        VERCEL_ORG_ID: manasa-252
+        VERCEL_PROJECT_ID: prj_NUeINMWNYsu3tFcNYdzrpDmssXDx
