@@ -81,7 +81,7 @@ jobs:
     # Deploy to Vercel using CLI
     - name: Deploy to Vercel
       run: |
-        vercel --prod --token Ne7k4LyRfuWQWUMugq79H9vc --confirm
+        vercel --prod --token Ne7k4LyRfuWQWUMugq79H9vc --yes
       env:
         VERCEL_ORG_ID: sT0ThO7ku3gNQM3AZ0oy2nw3
         VERCEL_PROJECT_ID: prj_NUeINMWNYsu3tFcNYdzrpDmssXDx
