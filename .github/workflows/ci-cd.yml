@@ -1,87 +1,138 @@
-name: Next.js CI/CD
+name: CI/CD pipeline learning
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select deployment environment"
+        required: true
+        type: choice
+        options:
+          - dev
+          - uat
+          - prod
+
+env:
+  AWS_REGION: ap-south-1  # update your region
+  NODE_ENV: production
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-
-    - name: Install dependencies
-      run: npm ci
-
-    - name: Run linting
-      run: npm run lint
-
-    - name: Run tests
-      run: npm test
-
-    - name: Run tests with coverage
-      run: npm run test:coverage
-
   build:
     runs-on: ubuntu-latest
-    needs: test
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        cache: 'npm'
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+          run_install: false
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
 
-    - name: Build application
-      run: npm run build
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Check lint errors
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm tsc --noEmit
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Docker Image
+        env:
+          ECR_REPOSITORY: your-ecr-repo
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+
+      - name: Save image URI
+        run: echo "IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/your-ecr-repo:${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Upload image metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-info
+          path: |
+            ${{ github.workspace }}/
+          retention-days: 1
 
   deploy:
-    runs-on: ubuntu-latest
     needs: build
-    # Only deploy on push to main branch (not on PRs)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.environment }}
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        cache: 'npm'
+      - name: Download image metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: image-info
 
-    - name: Install dependencies
-      run: npm ci
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-    - name: Build application
-      run: npm run build
+      - name: Set cluster-specific variables
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "dev" ]]; then
+            echo "ECS_CLUSTER=dev-cluster" >> $GITHUB_ENV
+            echo "ECS_SERVICE=dev-service" >> $GITHUB_ENV
+            echo "ECS_TASK_DEFINITION=dev-taskdef" >> $GITHUB_ENV
+            echo "CONTAINER_NAME=dev-container" >> $GITHUB_ENV
+          elif [[ "${{ github.event.inputs.environment }}" == "uat" ]]; then
+            echo "ECS_CLUSTER=uat-cluster" >> $GITHUB_ENV
+            echo "ECS_SERVICE=uat-service" >> $GITHUB_ENV
+            echo "ECS_TASK_DEFINITION=uat-taskdef" >> $GITHUB_ENV
+            echo "CONTAINER_NAME=uat-container" >> $GITHUB_ENV
+          else
+            echo "ECS_CLUSTER=prod-cluster" >> $GITHUB_ENV
+            echo "ECS_SERVICE=prod-service" >> $GITHUB_ENV
+            echo "ECS_TASK_DEFINITION=prod-taskdef" >> $GITHUB_ENV
+            echo "CONTAINER_NAME=prod-container" >> $GITHUB_ENV
+          fi
 
-    # Install Vercel CLI
-    - name: Install Vercel CLI
-      run: npm install --global vercel@latest
+      - name: Download ECS task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_TASK_DEFINITION }} \
+            --query taskDefinition > task-definition.json
 
-    # Deploy to Vercel using CLI
-    - name: Deploy to Vercel
-      run: |
-        vercel --prod --token Ne7k4LyRfuWQWUMugq79H9vc --yes
-      env:
-        VERCEL_ORG_ID: sT0ThO7ku3gNQM3AZ0oy2nw3
-        VERCEL_PROJECT_ID: prj_NUeINMWNYsu3tFcNYdzrpDmssXDx
+      - name: Update ECS task definition
+        id: render-taskdef
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ env.IMAGE_URI }}
+
+      - name: Deploy to ECS Cluster
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-taskdef.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
